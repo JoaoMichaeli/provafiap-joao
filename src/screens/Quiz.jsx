@@ -8,17 +8,17 @@ import {
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native'; // Import navigation hook
-import questions from '../../assets/questions.json'; // Updated path to questions.json
+import { useNavigation } from '@react-navigation/native';
+import questions from '../../assets/questions.json';
 
 const Quiz = () => {
   const [selectedQuestions, setSelectedQuestions] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [answers, setAnswers] = useState([]); // Track answers for each question
+  const [answers, setAnswers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const navigation = useNavigation(); // Initialize navigation
+  const navigation = useNavigation();
 
-  const QUESTIONS_PER_THEME = 5; // Number of questions per theme
+  const QUESTIONS_PER_THEME = 5;
 
   useEffect(() => {
     prepareQuiz();
@@ -27,28 +27,21 @@ const Quiz = () => {
   const prepareQuiz = async () => {
     try {
       const themes = Object.keys(questions);
-      if (!themes.length) {
-        throw new Error('No themes found in questions.json');
-      }
-
       let allQuestions = [];
 
-      // Randomize questions by theme
       themes.forEach((theme) => {
         const themeQuestions = questions[theme] || [];
         const shuffled = shuffleArray(themeQuestions);
         allQuestions = [...allQuestions, ...shuffled.slice(0, QUESTIONS_PER_THEME)];
       });
 
-      // Shuffle final questions
       const finalQuestions = shuffleArray(allQuestions).map((question) => ({
         ...question,
         theme: themes.find((theme) => questions[theme].includes(question)),
       }));
+      
       setSelectedQuestions(finalQuestions);
-
-      // Initialize answers
-      setAnswers(new Array(finalQuestions.length).fill(null)); // Initialize answers as null
+      setAnswers(new Array(finalQuestions.length).fill(null));
       setIsLoading(false);
     } catch (error) {
       console.error('Error preparing quiz:', error.message);
@@ -66,8 +59,16 @@ const Quiz = () => {
 
   const handleAnswer = (selectedOption) => {
     const updatedAnswers = [...answers];
-    updatedAnswers[currentQuestion] = selectedOption; // Update the answer for the current question
+    updatedAnswers[currentQuestion] = selectedOption;
     setAnswers(updatedAnswers);
+  };
+
+  const handleNextQuestion = () => {
+    if (currentQuestion < selectedQuestions.length - 1) {
+      setCurrentQuestion(prev => prev + 1);
+    } else {
+      navigation.navigate('ReviewAnswers', { selectedQuestions, answers });
+    }
   };
 
   if (isLoading) {
@@ -79,6 +80,7 @@ const Quiz = () => {
   }
 
   const currentQ = selectedQuestions[currentQuestion];
+  const hasAnswered = answers[currentQuestion] !== null;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -92,22 +94,43 @@ const Quiz = () => {
         <Text style={styles.question} testID="question-text">
           {currentQ.question}
         </Text>
-        {currentQ.answers.map((option, index) => (
+        
+        {currentQ.answers.map((option, index) => {
+          const isCorrect = index === currentQ.correctAnswer;
+          const isSelected = answers[currentQuestion] === index;
+          const showResults = hasAnswered;
+
+          return (
+            <TouchableOpacity
+              key={index}
+              style={[
+                styles.button,
+                isSelected && styles.selectedButton,
+                showResults && isCorrect && styles.correctAnswer,
+                showResults && isSelected && !isCorrect && styles.wrongAnswer,
+              ]}
+              onPress={() => !showResults && handleAnswer(index)}
+              disabled={showResults}
+            >
+              <Text style={styles.buttonText}>{option}</Text>
+            </TouchableOpacity>
+          );
+        })}
+
+        {hasAnswered && (
           <TouchableOpacity
-            key={index}
-            style={[
-              styles.button,
-              answers[currentQuestion] === index && styles.selectedButton,
-            ]}
-            onPress={() => handleAnswer(index)}
-            testID={`option-${index}`}
+            style={styles.nextButton}
+            onPress={handleNextQuestion}
           >
-            <Text style={styles.buttonText}>{option}</Text>
+            <Text style={styles.nextButtonText}>
+              {currentQuestion < selectedQuestions.length - 1 
+                ? 'Próxima Questão ➔' 
+                : 'Finalizar Quiz'}
+            </Text>
           </TouchableOpacity>
-        ))}
+        )}
       </View>
 
-      {/* Navigation Bar */}
       <View style={styles.navigationBar}>
         <ScrollView horizontal>
           {selectedQuestions.map((_, index) => (
@@ -115,59 +138,21 @@ const Quiz = () => {
               key={index}
               style={[
                 styles.navButton,
-                currentQuestion === index && styles.currentNavButton, // Highlight the current question
-                answers[index] !== null && styles.answeredNavButton, // Highlight answered questions in green
+                currentQuestion === index && styles.currentNavButton,
+                answers[index] !== null && styles.answeredNavButton,
               ]}
               onPress={() => setCurrentQuestion(index)}
             >
               <Text style={styles.navButtonText}>{index + 1}</Text>
             </TouchableOpacity>
           ))}
-          {/* Acabar Quiz Button */}
-          
         </ScrollView>
-        <TouchableOpacity
-            style={[styles.navButton, styles.finishButton]}
-            onPress={() => navigation.navigate('ReviewAnswers', { selectedQuestions, answers })}
-          >
-            <Text style={styles.navButtonText}>Acabar Quiz</Text>
-          </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  navigationBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderTopWidth: 1,
-    borderColor: '#ccc',
-    backgroundColor: '#f9f9f9',
-  },
-  navButton: {
-    backgroundColor: '#ddd',
-    padding: 10,
-    borderRadius: 5,
-    marginHorizontal: 5,
-  },
-  currentNavButton: {
-    backgroundColor: '#6641F3',
-  },
-  answeredNavButton: {
-    backgroundColor: '#4CAF50', // Green for answered questions
-  },
-  finishButton: {
-    backgroundColor: '#FF5722', // Orange for "Acabar Quiz"
-    padding: 10,
-    borderRadius: 5,
-    marginLeft: 10,
-  },
-  navButtonText: {
-    color: '#fff',
-    fontSize: 14,
-  },
   container: {
     flex: 1,
     backgroundColor: '#fff',
@@ -205,10 +190,28 @@ const styles = StyleSheet.create({
   selectedButton: {
     backgroundColor: '#4CAF50',
   },
+  correctAnswer: {
+    backgroundColor: '#4CAF50',
+  },
+  wrongAnswer: {
+    backgroundColor: '#FF5733',
+  },
   buttonText: {
     color: 'white',
     fontSize: 16,
     textAlign: 'center',
+  },
+  nextButton: {
+    backgroundColor: '#6641F3',
+    padding: 15,
+    borderRadius: 8,
+    marginTop: 20,
+    alignSelf: 'center',
+  },
+  nextButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   navigationBar: {
     flexDirection: 'row',
@@ -227,10 +230,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#6641F3',
   },
   answeredNavButton: {
-    backgroundColor: '#4CAF50', // Green for answered questions
-  },
-  finishButton: {
-    backgroundColor: '#FF5722', // Orange for "Acabar Quiz"
+    backgroundColor: '#4CAF50',
   },
   navButtonText: {
     color: '#fff',
